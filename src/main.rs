@@ -4,10 +4,11 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSMenu, NSMenuItem, NSScreen, NSStatusBar,
-    NSStatusItem, NSVariableStatusItemLength,
+    NSApplication, NSApplicationActivationPolicy, NSControlStateValueOff, NSControlStateValueOn,
+    NSMenu, NSMenuItem, NSScreen, NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
 };
 use objc2_foundation::{NSObject, ns_string};
+use objc2_service_management::{SMAppService, SMAppServiceStatus};
 
 const EXPANDED_SEPARATOR_LENGTH: f64 = 20.0;
 const MIN_COLLAPSED_SEPARATOR_LENGTH: f64 = 500.0;
@@ -18,6 +19,7 @@ const DEFAULT_SCREEN_WIDTH: f64 = 1728.0;
 struct ControllerIvars {
     toggle_item: RefCell<Option<Retained<NSStatusItem>>>,
     separator_item: RefCell<Option<Retained<NSStatusItem>>>,
+    launch_at_login_item: RefCell<Option<Retained<NSMenuItem>>>,
     collapsed: Cell<bool>,
     toggling: Cell<bool>,
 }
@@ -49,6 +51,32 @@ define_class!(
             if let Some(mtm) = MainThreadMarker::new() {
                 NSApplication::sharedApplication(mtm).terminate(None);
             }
+        }
+
+        #[unsafe(method(toggleLaunchAtLogin:))]
+        fn toggle_launch_at_login(&self, _sender: Option<&AnyObject>) {
+            let service = unsafe { SMAppService::mainAppService() };
+            let enabled = unsafe { service.status() } == SMAppServiceStatus::Enabled;
+            let result = unsafe {
+                if enabled {
+                    service.unregisterAndReturnError()
+                } else {
+                    service.registerAndReturnError()
+                }
+            };
+
+            if let Err(error) = result {
+                eprintln!(
+                    "Unable to update launch at login: {}",
+                    error.localizedDescription()
+                );
+
+                if unsafe { service.status() } == SMAppServiceStatus::RequiresApproval {
+                    unsafe { SMAppService::openSystemSettingsLoginItems() };
+                }
+            }
+
+            self.update_launch_at_login_item();
         }
     }
 );
@@ -87,6 +115,14 @@ impl FoldbarController {
 
     fn make_menu(&self, mtm: MainThreadMarker) -> Retained<NSMenu> {
         let menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), ns_string!("Foldbar"));
+        let launch_at_login_item = unsafe {
+            NSMenuItem::initWithTitle_action_keyEquivalent(
+                NSMenuItem::alloc(mtm),
+                ns_string!("Launch at Login"),
+                Some(sel!(toggleLaunchAtLogin:)),
+                ns_string!(""),
+            )
+        };
         let quit_item = unsafe {
             NSMenuItem::initWithTitle_action_keyEquivalent(
                 NSMenuItem::alloc(mtm),
@@ -97,11 +133,33 @@ impl FoldbarController {
         };
 
         unsafe {
+            launch_at_login_item.setTarget(Some(self));
             quit_item.setTarget(Some(self));
         }
 
+        self.ivars()
+            .launch_at_login_item
+            .replace(Some(launch_at_login_item.clone()));
+        self.update_launch_at_login_item();
+
+        menu.addItem(&launch_at_login_item);
         menu.addItem(&quit_item);
         menu
+    }
+
+    fn update_launch_at_login_item(&self) {
+        let Some(item) = self.ivars().launch_at_login_item.borrow().as_ref().cloned() else {
+            return;
+        };
+
+        let status = unsafe { SMAppService::mainAppService().status() };
+        let state = if status == SMAppServiceStatus::Enabled {
+            NSControlStateValueOn
+        } else {
+            NSControlStateValueOff
+        };
+
+        item.setState(state);
     }
 
     fn collapse(&self) {

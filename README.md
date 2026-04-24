@@ -12,7 +12,7 @@ behavior for menu bar icons placed between them.
 4. Click `‹` to collapse the hidden section.
 5. Click `›` to expand it again.
 
-The separator has a minimal menu with `Quit Foldbar`.
+The separator has a minimal menu with `Launch at Login` and `Quit Foldbar`.
 
 ## Development
 
@@ -38,6 +38,27 @@ Run the local app bundle:
 
 ```sh
 open target/debug/Foldbar.app
+```
+
+Build the release app bundle:
+
+```sh
+./scripts/build-app.sh --release
+```
+
+For distribution, sign the app with a Developer ID Application certificate:
+
+```sh
+FOLDBAR_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+  ./scripts/build-app.sh --release
+```
+
+Then zip and notarize the app before sharing it:
+
+```sh
+ditto -c -k --keepParent target/release/Foldbar.app target/release/Foldbar.zip
+xcrun notarytool submit target/release/Foldbar.zip --keychain-profile YOUR_PROFILE --wait
+xcrun stapler staple target/release/Foldbar.app
 ```
 
 Run checks:
@@ -66,8 +87,7 @@ visible menu bar area.
 This is v1 and intentionally small:
 
 - no preferences window
-- no autostart
 - no global hotkey
 - no auto-hide timer
-- no signing, notarization, DMG, or App Store packaging
+- no DMG or App Store packaging
 - no special notch or multi-screen behavior beyond using the main screen width
