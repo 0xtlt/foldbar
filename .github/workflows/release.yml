@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            target: aarch64-apple-darwin
+          - arch: x86_64
+            target: x86_64-apple-darwin
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Import certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+        run: |
+          CERT_PATH=$RUNNER_TEMP/cert.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain-db
+          echo -n "$CERTIFICATE_BASE64" | base64 --decode -o "$CERT_PATH"
+          security create-keychain -p "" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Build and bundle
+        run: bash scripts/build-app.sh --release ${{ matrix.arch }}
+
+      - name: Sign app
+        run: |
+          codesign --force --options runtime --sign "Developer ID Application" --deep "dist/Foldbar.app"
+          codesign --verify --deep --strict --verbose=2 "dist/Foldbar.app"
+
+      - name: Notarize
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          ditto -c -k --keepParent "dist/Foldbar.app" "dist/Foldbar-notarize.zip"
+          xcrun notarytool submit "dist/Foldbar-notarize.zip" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait
+          xcrun stapler staple "dist/Foldbar.app"
+          rm "dist/Foldbar-notarize.zip"
+
+      - name: Create DMG with stapled app
+        run: |
+          rm -f "dist/foldbar-${{ matrix.arch }}.dmg"
+          rm -rf dist/dmg
+          mkdir -p dist/dmg
+          cp -R dist/Foldbar.app dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create -volname "Foldbar" \
+            -srcfolder dist/dmg \
+            -ov -format UDZO \
+            "dist/foldbar-${{ matrix.arch }}.dmg"
+          rm -rf dist/dmg
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" "dist/foldbar-${{ matrix.arch }}.dmg" --clobber

@@ -37,7 +37,7 @@ Build the local app bundle:
 Run the local app bundle:
 
 ```sh
-open target/debug/Foldbar.app
+open dist/Foldbar.app
 ```
 
 Build the release app bundle:
@@ -56,10 +56,14 @@ FOLDBAR_CODESIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 Then zip and notarize the app before sharing it:
 
 ```sh
-ditto -c -k --keepParent target/release/Foldbar.app target/release/Foldbar.zip
-xcrun notarytool submit target/release/Foldbar.zip --keychain-profile YOUR_PROFILE --wait
-xcrun stapler staple target/release/Foldbar.app
+ditto -c -k --keepParent dist/Foldbar.app dist/Foldbar.zip
+xcrun notarytool submit dist/Foldbar.zip --keychain-profile YOUR_PROFILE --wait
+xcrun stapler staple dist/Foldbar.app
 ```
+
+Release builds create `dist/Foldbar.app` and `dist/foldbar-<arch>.dmg`.
+GitHub Releases build, sign, notarize, staple, and upload DMGs for `arm64` and
+`x86_64`.
 
 Run checks:
 
@@ -89,5 +93,5 @@ This is v1 and intentionally small:
 - no preferences window
 - no global hotkey
 - no auto-hide timer
-- no DMG or App Store packaging
+- no App Store packaging
 - no special notch or multi-screen behavior beyond using the main screen width
