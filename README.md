@@ -14,6 +14,19 @@ behavior for menu bar icons placed between them.
 
 The separator has a minimal menu with `Launch at Login` and `Quit Foldbar`.
 
+## Installation
+
+### Homebrew
+
+```sh
+brew tap 0xtlt/tap
+brew install foldbar
+```
+
+### Manual
+
+Download the latest DMG from [Releases](https://github.com/0xtlt/foldbar/releases).
+
 ## Development
 
 Requirements:
