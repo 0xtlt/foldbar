@@ -44,6 +44,7 @@ DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
+RESOURCES_DIR="$CONTENTS_DIR/Resources"
 DMG_DIR="$DIST_DIR/dmg"
 DMG_PATH="$DIST_DIR/$BIN_NAME-$ARCH.dmg"
 
@@ -59,9 +60,10 @@ BINARY="$ROOT_DIR/target/$TARGET_TRIPLE/$PROFILE/$BIN_NAME"
 
 echo "Creating app bundle..."
 rm -rf "$APP_DIR" "$DMG_DIR" "$DMG_PATH"
-mkdir -p "$MACOS_DIR"
+mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 cp "$BINARY" "$MACOS_DIR/$BIN_NAME"
 cp "$ROOT_DIR/Info.plist" "$CONTENTS_DIR/Info.plist"
+cp "$ROOT_DIR/assets/Foldbar.icns" "$RESOURCES_DIR/Foldbar.icns"
 
 if [[ -n "${FOLDBAR_CODESIGN_IDENTITY:-}" ]]; then
   codesign --force --options runtime --sign "$FOLDBAR_CODESIGN_IDENTITY" "$APP_DIR"
