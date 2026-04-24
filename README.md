@@ -14,6 +14,15 @@ behavior for menu bar icons placed between them.
 
 The separator has a minimal menu with `Launch at Login` and `Quit Foldbar`.
 
+## Launch at Login
+
+To start Foldbar automatically when you log in:
+
+1. Click the `|` separator in the menu bar.
+2. Select `Launch at Login`.
+
+macOS may ask you to approve Foldbar in System Settings > General > Login Items.
+
 ## Installation
 
 ### Homebrew
