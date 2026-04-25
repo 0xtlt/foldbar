@@ -111,6 +111,7 @@ impl FoldbarController {
 
         self.ivars().toggle_item.replace(Some(toggle_item));
         self.ivars().separator_item.replace(Some(separator_item));
+        self.collapse();
     }
 
     fn make_menu(&self, mtm: MainThreadMarker) -> Retained<NSMenu> {
