@@ -19,7 +19,9 @@ jobs:
             target: x86_64-apple-darwin
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -37,8 +39,8 @@ jobs:
           security create-keychain -p "" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "" "$KEYCHAIN_PATH"
-          security import "$CERT_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH" >/dev/null
+          security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH" >/dev/null
           security list-keychain -d user -s "$KEYCHAIN_PATH"
 
       - name: Build and bundle
@@ -81,3 +83,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.event.release.tag_name }}" "dist/foldbar-${{ matrix.arch }}.dmg" --clobber
+
+      - name: Cleanup signing materials
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/cert.p12" "dist/Foldbar-notarize.zip"
+          security delete-keychain "$RUNNER_TEMP/build.keychain-db" 2>/dev/null || true
