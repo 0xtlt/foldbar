@@ -4,10 +4,11 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSControlStateValueOff, NSControlStateValueOn,
-    NSMenu, NSMenuItem, NSScreen, NSStatusBar, NSStatusItem, NSVariableStatusItemLength,
+    NSApplication, NSApplicationActivationPolicy, NSApplicationDidChangeScreenParametersNotification,
+    NSControlStateValueOff, NSControlStateValueOn, NSMenu, NSMenuItem, NSScreen, NSStatusBar,
+    NSStatusItem, NSVariableStatusItemLength,
 };
-use objc2_foundation::{NSObject, ns_string};
+use objc2_foundation::{NSNotification, NSNotificationCenter, NSObject, ns_string};
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
 
 const EXPANDED_SEPARATOR_LENGTH: f64 = 20.0;
@@ -22,6 +23,7 @@ struct ControllerIvars {
     launch_at_login_item: RefCell<Option<Retained<NSMenuItem>>>,
     collapsed: Cell<bool>,
     toggling: Cell<bool>,
+    screen_observer_registered: Cell<bool>,
 }
 
 define_class!(
@@ -78,6 +80,13 @@ define_class!(
 
             self.update_launch_at_login_item();
         }
+
+        #[unsafe(method(screenParametersDidChange:))]
+        fn screen_parameters_did_change(&self, _notification: &NSNotification) {
+            if self.ivars().collapsed.get() {
+                self.set_collapsed_separator_length();
+            }
+        }
     }
 );
 
@@ -111,7 +120,23 @@ impl FoldbarController {
 
         self.ivars().toggle_item.replace(Some(toggle_item));
         self.ivars().separator_item.replace(Some(separator_item));
+        self.register_screen_observer();
         self.collapse();
+    }
+
+    fn register_screen_observer(&self) {
+        if self.ivars().screen_observer_registered.replace(true) {
+            return;
+        }
+
+        unsafe {
+            NSNotificationCenter::defaultCenter().addObserver_selector_name_object(
+                self,
+                sel!(screenParametersDidChange:),
+                Some(NSApplicationDidChangeScreenParametersNotification),
+                None,
+            );
+        }
     }
 
     fn make_menu(&self, mtm: MainThreadMarker) -> Retained<NSMenu> {
@@ -164,12 +189,7 @@ impl FoldbarController {
     }
 
     fn collapse(&self) {
-        let length = collapsed_separator_length();
-        if let Some(separator_item) = self.ivars().separator_item.borrow().as_ref() {
-            // A very wide separator pushes intervening menu bar items offscreen,
-            // matching Hidden Bar's core technique without private APIs.
-            separator_item.setLength(length);
-        }
+        self.set_collapsed_separator_length();
         if let Some(toggle_item) = self.ivars().toggle_item.borrow().as_ref() {
             if let Some(mtm) = MainThreadMarker::new() {
                 if let Some(button) = toggle_item.button(mtm) {
@@ -178,6 +198,14 @@ impl FoldbarController {
             }
         }
         self.ivars().collapsed.set(true);
+    }
+
+    fn set_collapsed_separator_length(&self) {
+        if let Some(separator_item) = self.ivars().separator_item.borrow().as_ref() {
+            // A very wide separator pushes intervening menu bar items offscreen,
+            // matching Hidden Bar's core technique without private APIs.
+            separator_item.setLength(collapsed_separator_length());
+        }
     }
 
     fn expand(&self) {
@@ -195,16 +223,54 @@ impl FoldbarController {
     }
 }
 
+impl Drop for FoldbarController {
+    fn drop(&mut self) {
+        if self.ivars().screen_observer_registered.get() {
+            unsafe {
+                NSNotificationCenter::defaultCenter().removeObserver_name_object(
+                    self,
+                    Some(NSApplicationDidChangeScreenParametersNotification),
+                    None,
+                );
+            }
+        }
+    }
+}
+
 fn collapsed_separator_length() -> f64 {
     let screen_width = MainThreadMarker::new()
         .and_then(NSScreen::mainScreen)
         .map(|screen| screen.visibleFrame().size.width)
         .unwrap_or(DEFAULT_SCREEN_WIDTH);
 
+    collapsed_separator_length_for_screen_width(screen_width)
+}
+
+fn collapsed_separator_length_for_screen_width(screen_width: f64) -> f64 {
     (screen_width + 200.0).clamp(
         MIN_COLLAPSED_SEPARATOR_LENGTH,
         MAX_COLLAPSED_SEPARATOR_LENGTH,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn collapsed_separator_length_adds_padding_for_normal_screen_width() {
+        assert_eq!(collapsed_separator_length_for_screen_width(1728.0), 1928.0);
+    }
+
+    #[test]
+    fn collapsed_separator_length_clamps_to_minimum() {
+        assert_eq!(collapsed_separator_length_for_screen_width(100.0), 500.0);
+    }
+
+    #[test]
+    fn collapsed_separator_length_clamps_to_maximum() {
+        assert_eq!(collapsed_separator_length_for_screen_width(5000.0), 4000.0);
+    }
 }
 
 fn main() {
