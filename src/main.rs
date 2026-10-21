@@ -4,9 +4,10 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSApplicationDidChangeScreenParametersNotification,
-    NSControlStateValueOff, NSControlStateValueOn, NSMenu, NSMenuItem, NSScreen, NSStatusBar,
-    NSStatusItem, NSVariableStatusItemLength,
+    NSApplication, NSApplicationActivationPolicy,
+    NSApplicationDidChangeScreenParametersNotification, NSControlStateValueOff,
+    NSControlStateValueOn, NSMenu, NSMenuItem, NSScreen, NSStatusBar, NSStatusItem,
+    NSVariableStatusItemLength,
 };
 use objc2_foundation::{NSNotification, NSNotificationCenter, NSObject, ns_string};
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
@@ -190,12 +191,11 @@ impl FoldbarController {
 
     fn collapse(&self) {
         self.set_collapsed_separator_length();
-        if let Some(toggle_item) = self.ivars().toggle_item.borrow().as_ref() {
-            if let Some(mtm) = MainThreadMarker::new() {
-                if let Some(button) = toggle_item.button(mtm) {
-                    button.setTitle(ns_string!("›"));
-                }
-            }
+        if let Some(toggle_item) = self.ivars().toggle_item.borrow().as_ref()
+            && let Some(mtm) = MainThreadMarker::new()
+            && let Some(button) = toggle_item.button(mtm)
+        {
+            button.setTitle(ns_string!("›"));
         }
         self.ivars().collapsed.set(true);
     }
@@ -212,12 +212,11 @@ impl FoldbarController {
         if let Some(separator_item) = self.ivars().separator_item.borrow().as_ref() {
             separator_item.setLength(EXPANDED_SEPARATOR_LENGTH);
         }
-        if let Some(toggle_item) = self.ivars().toggle_item.borrow().as_ref() {
-            if let Some(mtm) = MainThreadMarker::new() {
-                if let Some(button) = toggle_item.button(mtm) {
-                    button.setTitle(ns_string!("‹"));
-                }
-            }
+        if let Some(toggle_item) = self.ivars().toggle_item.borrow().as_ref()
+            && let Some(mtm) = MainThreadMarker::new()
+            && let Some(button) = toggle_item.button(mtm)
+        {
+            button.setTitle(ns_string!("‹"));
         }
         self.ivars().collapsed.set(false);
     }
@@ -253,6 +252,19 @@ fn collapsed_separator_length_for_screen_width(screen_width: f64) -> f64 {
     )
 }
 
+fn main() {
+    let mtm = MainThreadMarker::new().expect("Foldbar must run on the main thread");
+    let app = NSApplication::sharedApplication(mtm);
+    // Accessory keeps Foldbar out of the Dock while still allowing status items.
+    app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+
+    let controller = FoldbarController::new(mtm);
+    controller.setup(mtm);
+
+    app.finishLaunching();
+    app.run();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,17 +283,4 @@ mod tests {
     fn collapsed_separator_length_clamps_to_maximum() {
         assert_eq!(collapsed_separator_length_for_screen_width(5000.0), 4000.0);
     }
-}
-
-fn main() {
-    let mtm = MainThreadMarker::new().expect("Foldbar must run on the main thread");
-    let app = NSApplication::sharedApplication(mtm);
-    // Accessory keeps Foldbar out of the Dock while still allowing status items.
-    app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
-
-    let controller = FoldbarController::new(mtm);
-    controller.setup(mtm);
-
-    app.finishLaunching();
-    app.run();
 }
