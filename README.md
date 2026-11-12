@@ -1,3 +1,6 @@
+> [!WARNING]
+> **Deprecated:** Foldbar is no longer maintained and this repository is archived (read-only).
+
 # Foldbar
 
 Foldbar is a tiny macOS menu bar utility written in Rust. It reproduces the core
